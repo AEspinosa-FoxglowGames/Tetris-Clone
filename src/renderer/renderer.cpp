@@ -1,5 +1,7 @@
 #include "renderer.h"
 #include "shader.h"
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <stb_truetype.h>
 
 Renderer::Renderer(int w, int h, const std::string vert, const std::string frag)
 {
@@ -84,5 +86,60 @@ void Renderer::DrawBG(int w)
 	int sides = screenW - w;
 	DrawRect(0, 0, sides / 2, screenH, 155, 155, 155);
 	DrawRect(screenW-sides/2, 0, sides / 2, screenH, 155, 155, 155);
+	
 	DrawRect(screenW - sides / 2+10,10,100,100,20,20,20);
+	DrawText("Next", screenW - sides / 2 + 15, 25, 255, 255, 255);
+	// temporary, in DrawBG
+	//DrawText("TEST", 400, 300, 255, 0, 0);
+}
+void Renderer::DrawText(const std::string str, int x, int y, unsigned int r, unsigned int g, unsigned int b)
+{
+	float cx = x, cy = y;
+	for (char c : str)
+	{
+		if (c < 32 || c > 127) continue;
+		stbtt_aligned_quad q;
+		stbtt_GetBakedQuad(charData, 512, 512, c - 32, &cx, &cy, &q, 1);
+
+		//std::cerr << "char=" << c << " x0=" << q.x0 << " y0=" << q.y0
+			//<< " x1=" << q.x1 << " y1=" << q.y1 << "\n";
+
+		int x0 = (int)q.x0, y0 = (int)q.y0;
+		int x1 = (int)q.x1, y1 = (int)q.y1;
+
+		for (int py = y0; py < y1; py++)
+			for (int px = x0; px < x1; px++)
+			{
+				float u = q.s0 + (px - x0) / (float)(x1 - x0) * (q.s1 - q.s0);
+				float v = q.t0 + (py - y0) / (float)(y1 - y0) * (q.t1 - q.t0);
+
+				int bx = (int)(u * 512);
+				int by = (int)(v * 512);
+				unsigned char alpha = fontBitmap[by * 512 + bx];
+
+				if (alpha > 128) // threshold - only draw solid pixels
+					SetPixel(px, py, r, g, b);
+			}
+	}
+}
+
+void Renderer::LoadFont(const char* path)
+{
+	FILE* f = fopen(path, "rb");
+	if (!f) { std::cerr << "Failed to open font: " << path << "\n"; return; }
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	std::vector<unsigned char> ttfBuffer(size);
+	fread(ttfBuffer.data(), 1, size, f);
+	fclose(f);
+
+	std::cerr << "Font file size: " << size << "\n"; // should be >10000
+
+	int result = stbtt_BakeFontBitmap(ttfBuffer.data(), 0, 16.0f,
+		fontBitmap, 512, 512,
+		32, 96, charData);
+
+	std::cerr << "Bake result: " << result << "\n"; // negative = failed
 }

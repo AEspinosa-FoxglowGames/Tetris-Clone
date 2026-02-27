@@ -16,9 +16,10 @@ void Game::Init(int W, int H, int fx, int fw)
 	fieldX = fx;
 	fieldW = fw;
 	fastSpeed = 600.f;
-
-	nextType = RandomType();
+	score = 0;
+	
 	Random::Init();
+	nextType = RandomType();
 	SpawnPiece(nextType);
 	nextType = RandomType();
 }
@@ -33,6 +34,31 @@ void Game::Update(float dt)
 		level++;
 		levelTimer = 0.f;
 	}
+
+	//Move fast if hold
+	if (holdLeft || holdRight)
+	{
+		dasTimer += dt;
+		if (dasTimer >= dasDelay)
+		{
+			dasActive = true;
+			arrTimer += dt;
+			if (arrTimer >= arrDelay)
+			{
+				arrTimer = 0.f;
+				if (holdLeft)  MoveActive(-1);
+				if (holdRight) MoveActive(1);
+			}
+		}
+	}
+	else
+	{
+		dasTimer = 0.f;
+		arrTimer = 0.f;
+		dasActive = false;
+	}
+
+
 	if (IsGrounded(active))
 	{
 		LockActive();
@@ -138,33 +164,20 @@ void Game::OnInput(int key)
 {
 	Entity& active = GetActive();
 	if (key == GLFW_KEY_SPACE) active.velY = fastSpeed;
-	if (key == GLFW_KEY_LEFT||key == GLFW_KEY_A)  active.x -= active.blockSize;
-	if (key == GLFW_KEY_LEFT||key == GLFW_KEY_A && CollidesHorizontal(active)) active.x += active.blockSize; // undo left
-	if (key == GLFW_KEY_RIGHT||key == GLFW_KEY_D) active.x += active.blockSize;
-	if (key == GLFW_KEY_RIGHT||key == GLFW_KEY_D && CollidesHorizontal(active)) active.x -= active.blockSize; // undo right
-	if (key == GLFW_KEY_UP|| key == GLFW_KEY_W)
+	if (key == GLFW_KEY_LEFT || key == GLFW_KEY_A) MoveActive(-1);
+	if (key == GLFW_KEY_RIGHT || key == GLFW_KEY_D) MoveActive(1);
+	if (key == GLFW_KEY_UP || key == GLFW_KEY_W)
 	{
 		RotateActive(true);
 		if (CollidesHorizontal(GetActive()) || IsGrounded(GetActive()))
-			RotateActive(false); // undo by rotating back
+			RotateActive(false);
 	}
-	if (key == GLFW_KEY_DOWN|| key == GLFW_KEY_S)
+	if (key == GLFW_KEY_DOWN || key == GLFW_KEY_S)
 	{
 		RotateActive(false);
 		if (CollidesHorizontal(GetActive()) || IsGrounded(GetActive()))
-			RotateActive(true); // undo by rotating back
+			RotateActive(true);
 	}
-	// clamp each block to field bounds
-	for (auto& b : active.blocks)
-	{
-		int blockLeft = active.x + b.x * active.blockSize;
-		int blockRight = blockLeft + active.blockSize;
-		if (blockLeft < fieldX)
-			active.x += fieldX - blockLeft;
-		if (blockRight > fieldX + fieldW)
-			active.x -= blockRight - (fieldX + fieldW);
-	}
-	
 }
 
 //PRIVATE-------------------------------------
@@ -199,7 +212,7 @@ void Game::SpawnPiece(EntityType type)
 	int blockSize = 20;
 	int cols = fieldW / blockSize;
 	e.x = fieldX + Random::Int(0, cols - 3) * blockSize; // -3 gives room for widest pieces
-	e.velY = 60.f + (level - 1) * 10.f;
+	e.velY = 60.f + (level - 1) * 5.f;
 	e.locked = false;
 
 	switch (type)
@@ -293,8 +306,8 @@ bool Game::CollidesHorizontal(const Entity& e)
 {
 	for (auto& b : e.blocks)
 	{
-		int bx = e.x + b.x * e.blockSize;
-		int by = e.y + b.y * e.blockSize;
+		int bx = (int)round(e.x) + b.x * e.blockSize; // needs round
+		int by = (int)round(e.y) + b.y * e.blockSize;
 
 		for (auto& other : entities)
 		{
@@ -376,5 +389,32 @@ void Game::CheckRows()
 					b.y += 1; // shift down by one block
 			}
 		}
+	}
+	// scoring - more lines at once = more points
+	if (fullRows.size() == 1) score += 100;
+	else if (fullRows.size() == 2) score += 300;
+	else if (fullRows.size() == 3) score += 500;
+	else if (fullRows.size() == 4) score += 800; // tetris!
+}
+void Game::Reset()
+{
+	entities.clear();
+	score = 0;
+	level = 1;
+	levelTimer = 0.f;
+	gameOver = false;
+	nextType = RandomType();
+	SpawnPiece(nextType);
+	nextType = RandomType();
+}
+void Game::MoveActive(int dir) // dir = -1 left, +1 right
+{
+	Entity& a = GetActive();
+	a.x += dir * a.blockSize;
+	if (CollidesHorizontal(a)) a.x -= dir * a.blockSize;
+	for (auto& b : a.blocks)
+	{
+		if (a.x + b.x * a.blockSize < fieldX) a.x += a.blockSize;
+		if (a.x + (b.x + 1) * a.blockSize > fieldX + fieldW) a.x -= a.blockSize;
 	}
 }

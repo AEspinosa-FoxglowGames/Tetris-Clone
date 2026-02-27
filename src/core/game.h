@@ -23,6 +23,17 @@ class Game {
 	float levelTimer = 0.f;
 	float levelInterval = 30.f; // seconds per leve
 
+	int score;
+	bool holdLeft = false, holdRight = false;
+	float dasTimer = 0.f;     // time held before repeat starts
+	float arrTimer = 0.f;     // repeat speed once DAS triggers
+	float dasDelay = 0.2f;    // seconds before repeat kicks in
+	float arrDelay = 0.05f;   // seconds between repeats after that
+	bool dasActive = false;   // has DAS triggered yet?
+	void MoveActive(int dir);
+	
+	
+
 public:
 	void Init(int screenW, int screenH, int fieldX, int fieldWH);
 	void Update(float dt);
@@ -30,4 +41,8 @@ public:
 	void OnInput(int key);
 	bool IsOver() { return gameOver; }
 	void DrawPreview(Renderer& renderer);
+	void Reset();
+	int GetScore() { return score; }
+	void SetHold(bool left, bool right) { holdLeft = left; holdRight = right; }
+	int GetLevel() { return level; }
 };

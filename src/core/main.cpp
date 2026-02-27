@@ -9,9 +9,20 @@
 // in main.cpp
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (action != GLFW_PRESS) return;
 	Game* game = static_cast<Game*>(glfwGetWindowUserPointer(window));
-	game->OnInput(key);
+
+	if (action == GLFW_PRESS)
+	{
+		if (key == GLFW_KEY_R && game->IsOver()) game->Reset();
+		game->OnInput(key); // still fires once on press
+		if (key == GLFW_KEY_LEFT || key == GLFW_KEY_A) game->SetHold(true, false);
+		if (key == GLFW_KEY_RIGHT || key == GLFW_KEY_D) game->SetHold(false, true);
+	}
+	if (action == GLFW_RELEASE)
+	{
+		if (key == GLFW_KEY_LEFT || key == GLFW_KEY_A) game->SetHold(false, false);
+		if (key == GLFW_KEY_RIGHT || key == GLFW_KEY_D) game->SetHold(false, false);
+	}
 }
 void processInput(GLFWwindow* window, Game& game)
 {
@@ -54,6 +65,12 @@ int main()
 
 	Renderer renderer(screenW, screenH, "assets/shaders/screen.vert", "assets/shaders/screen.frag");
 	float lastTime = glfwGetTime();
+	//renderer.LoadFont("assets/fonts/Aclonica.ttf"); //meh
+	renderer.LoadFont("assets/fonts/IMMORTAL.ttf"); //okay?
+	//renderer.LoadFont("assets/fonts/AvenueX.ttf"); //wrong file type...
+	//renderer.LoadFont("assets/fonts/Megrim.ttf"); //unreadable
+	//renderer.LoadFont("assets/fonts/ROBOTECH.ttf"); //okayish?
+	//renderer.LoadFont("assets/fonts/OpenSans.ttf"); //ugh...
 
 	Game game;
 	glfwSetWindowUserPointer(window, &game);
@@ -75,12 +92,17 @@ int main()
 			game.Update(dt);
 			renderer.Clear();
 			renderer.DrawBG(worldW);
+			renderer.DrawText("Score: "+std::to_string(game.GetScore()), 10, 25, 255, 255, 255);
+			renderer.DrawText("Level: "+std::to_string(game.GetLevel()), 10, 50, 255, 255, 255);
 			game.Draw(renderer);
 			game.DrawPreview(renderer);
 		}
 		else
 		{
-			std::cout << "Game Over\n";
+			renderer.Clear();
+			renderer.DrawBG(worldW);
+			renderer.DrawText("GAME OVER", 370, 280, 255, 0, 0);
+			renderer.DrawText("Press R", 380, 300, 255, 255, 255);
 		}
 		
 		renderer.Present();
