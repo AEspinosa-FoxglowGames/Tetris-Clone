@@ -4,6 +4,9 @@
 #include <ctime>    // for time()
 #include <vector>
 #include "random.h"
+#include <algorithm>
+#include <map>
+
 
 
 void Game::Init(int W, int H, int fx, int fw)
@@ -13,19 +16,34 @@ void Game::Init(int W, int H, int fx, int fw)
 	fieldX = fx;
 	fieldW = fw;
 	fastSpeed = 600.f;
+
+	nextType = RandomType();
 	Random::Init();
-	SpawnPiece(RandomType());
+	SpawnPiece(nextType);
+	nextType = RandomType();
 }
 void Game::Update(float dt)
 {
-	if (entities.empty()) return; // safety check
+	if (entities.empty() || gameOver) return;//safety
 
 	Entity& active = GetActive();
-
+	levelTimer += dt;
+	if (levelTimer >= levelInterval)
+	{
+		level++;
+		levelTimer = 0.f;
+	}
 	if (IsGrounded(active))
 	{
 		LockActive();
-		SpawnPiece(RandomType()); // spawn the next one
+		CheckRows();
+		SpawnPiece(nextType);
+		nextType = RandomType(); // spawn the next one
+		if (IsGrounded(GetActive())) // new piece already grounded = game over
+		{
+			gameOver = true;
+			return;
+		}
 	}
 	else
 	{
@@ -43,14 +61,99 @@ void Game::Draw(Renderer& renderer)
 				e.r, e.g, e.b
 			);
 }
+void Game::DrawPreview(Renderer& renderer)
+{
+	int blockSize = 20;
+	int r, g, b;
+	std::vector<glm::ivec2> blocks;
+	switch (nextType)
+	{
+	case EntityType::Square:
+		r = 255;
+		g = 255;
+		b = 0;
+		blocks = { {0,0},{1,0},{0,1},{1,1} };
+		break;
+	case EntityType::L:
+		r = 255;
+		g = 127;
+		b = 0;
+		blocks = { {0,0},{0,1},{0,2},{1,2} };
+		break;
+	case EntityType::J:
+		r = 0;
+		g = 0;
+		b = 255;
+		blocks = { {1,0},{1,1},{0,2},{1,2} };
+		break;
+	case EntityType::Line:
+		r = 0;
+		g = 255;
+		b = 255;
+		blocks = { {0,0},{0,1},{0,2},{0,3} };
+		break;
+	case EntityType::S:
+		r = 0;
+		g = 255;
+		b = 0;
+		blocks = { {1,0},{2,0},{0,1},{1,1} };
+		break;
+	case EntityType::Z:
+		r = 255;
+		g = 0;
+		b = 0;
+		blocks = { {0,0},{1,0},{1,1},{2,1} };
+		break;
+	case EntityType::T:
+		r = 160;
+		g = 0;
+		b = 240;
+		blocks = { {0,0},{1,0},{2,0},{1,1} };
+		break;
+	}
+	int maxX = 0, maxY = 0;
+	for (auto& bl : blocks) { maxX = std::max(maxX, bl.x); maxY = std::max(maxY, bl.y); }
+	int pieceW = (maxX + 1) * blockSize;
+	int pieceH = (maxY + 1) * blockSize;
+
+	// center of the preview box
+	int sides = screenW - fieldW;
+	int boxX = screenW - sides / 2 + 10;
+	int boxY = 10;
+	int boxSize = 100;
+
+	// offset to center piece inside box
+	int offsetX = boxX + (boxSize - pieceW) / 2;
+	int offsetY = boxY + (boxSize - pieceH) / 2;
+
+	for (auto& bl : blocks)
+		renderer.DrawRect(
+			offsetX + bl.x * blockSize,
+			offsetY + bl.y * blockSize,
+			blockSize, blockSize,
+			r, g, b
+		);
+}
 void Game::OnInput(int key)
 {
 	Entity& active = GetActive();
 	if (key == GLFW_KEY_SPACE) active.velY = fastSpeed;
-	if (key == GLFW_KEY_LEFT)  active.x -= active.blockSize;
-	if (key == GLFW_KEY_LEFT && CollidesHorizontal(active)) active.x += active.blockSize; // undo left
-	if (key == GLFW_KEY_RIGHT) active.x += active.blockSize;
-	if (key == GLFW_KEY_RIGHT && CollidesHorizontal(active)) active.x -= active.blockSize; // undo right
+	if (key == GLFW_KEY_LEFT||key == GLFW_KEY_A)  active.x -= active.blockSize;
+	if (key == GLFW_KEY_LEFT||key == GLFW_KEY_A && CollidesHorizontal(active)) active.x += active.blockSize; // undo left
+	if (key == GLFW_KEY_RIGHT||key == GLFW_KEY_D) active.x += active.blockSize;
+	if (key == GLFW_KEY_RIGHT||key == GLFW_KEY_D && CollidesHorizontal(active)) active.x -= active.blockSize; // undo right
+	if (key == GLFW_KEY_UP|| key == GLFW_KEY_W)
+	{
+		RotateActive(true);
+		if (CollidesHorizontal(GetActive()) || IsGrounded(GetActive()))
+			RotateActive(false); // undo by rotating back
+	}
+	if (key == GLFW_KEY_DOWN|| key == GLFW_KEY_S)
+	{
+		RotateActive(false);
+		if (CollidesHorizontal(GetActive()) || IsGrounded(GetActive()))
+			RotateActive(true); // undo by rotating back
+	}
 	// clamp each block to field bounds
 	for (auto& b : active.blocks)
 	{
@@ -65,7 +168,29 @@ void Game::OnInput(int key)
 }
 
 //PRIVATE-------------------------------------
-
+void Game::RotateActive(bool clockwise)
+{
+	Entity& e = GetActive();
+	for (auto& b : e.blocks)
+	{
+		int oldX = b.x;
+		int oldY = b.y;
+		if (clockwise)
+		{
+			b.x = oldY;
+			b.y = -oldX;
+		}
+		else
+		{
+			b.x = -oldY;
+			b.y = oldX;
+		}
+	}
+	// normalize
+	int minX = INT_MAX, minY = INT_MAX;
+	for (auto& b : e.blocks) { minX = std::min(minX, b.x); minY = std::min(minY, b.y); }
+	for (auto& b : e.blocks) { b.x -= minX; b.y -= minY; }
+}
 void Game::SpawnPiece(EntityType type)
 {
 	Entity e;
@@ -74,7 +199,7 @@ void Game::SpawnPiece(EntityType type)
 	int blockSize = 20;
 	int cols = fieldW / blockSize;
 	e.x = fieldX + Random::Int(0, cols - 3) * blockSize; // -3 gives room for widest pieces
-	e.velY = 60.f;
+	e.velY = 60.f + (level - 1) * 10.f;
 	e.locked = false;
 
 	switch (type)
@@ -187,4 +312,69 @@ bool Game::CollidesHorizontal(const Entity& e)
 		}
 	}
 	return false;
+}
+
+void Game::CheckRows()
+{
+	std::map<int, int> rowCount; // y position -> block count
+	std::vector<int> fullRows;
+
+	for (auto& e : entities)
+	{
+		if (!e.locked) continue;
+		for (auto& b : e.blocks)
+		{
+			int blockY = (int)round(e.y) + b.y * e.blockSize;
+			rowCount[blockY]++;
+		}
+	}
+
+	int blocksPerRow = fieldW / 20; // 15 for 300px field with 20px blocks
+
+	for (auto& [y, count] : rowCount)
+	{
+		if (count == blocksPerRow)
+		{
+			fullRows.emplace_back(y);
+		}
+	}
+	//delete
+	for (int targetY : fullRows)
+	{
+		for (auto& e : entities)
+		{
+			if (!e.locked) continue;
+			e.blocks.erase(
+				std::remove_if(e.blocks.begin(), e.blocks.end(), [&](auto& b) {
+					int blockY = (int)round(e.y) + b.y * e.blockSize;
+					return blockY == targetY;
+					}),
+				e.blocks.end()
+			);
+		}
+	}
+
+	//remove empty entities
+	entities.erase(
+		std::remove_if(entities.begin(), entities.end(), [](auto& e) {
+			return e.locked && e.blocks.empty();
+			}),
+		entities.end()
+	);
+
+	//shift rest down
+	std::sort(fullRows.begin(), fullRows.end()); // smallest y first
+	for (int targetY : fullRows)
+	{
+		for (auto& e : entities)
+		{
+			if (!e.locked) continue;
+			for (auto& b : e.blocks)
+			{
+				int blockY = (int)round(e.y) + b.y * e.blockSize;
+				if (blockY < targetY) // only shift blocks above the cleared row
+					b.y += 1; // shift down by one block
+			}
+		}
+	}
 }

@@ -4,6 +4,7 @@
 #include "Renderer.h"
 #include "entity.h"
 #include "game.h"
+#include <iostream>
 
 // in main.cpp
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -68,15 +69,20 @@ int main()
 
 		processInput(window,game);
 
-		//TEMP
 		
-
-		//rendering
+		if (!game.IsOver())
+		{
+			game.Update(dt);
+			renderer.Clear();
+			renderer.DrawBG(worldW);
+			game.Draw(renderer);
+			game.DrawPreview(renderer);
+		}
+		else
+		{
+			std::cout << "Game Over\n";
+		}
 		
-		game.Update(dt);
-		renderer.Clear();
-		renderer.DrawBG(worldW);
-		game.Draw(renderer);
 		renderer.Present();
 
 		glfwSwapBuffers(window);

@@ -84,4 +84,5 @@ void Renderer::DrawBG(int w)
 	int sides = screenW - w;
 	DrawRect(0, 0, sides / 2, screenH, 155, 155, 155);
 	DrawRect(screenW-sides/2, 0, sides / 2, screenH, 155, 155, 155);
+	DrawRect(screenW - sides / 2+10,10,100,100,20,20,20);
 }
